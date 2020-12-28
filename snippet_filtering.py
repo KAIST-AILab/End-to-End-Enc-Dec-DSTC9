@@ -1,5 +1,6 @@
 from collections import Counter, defaultdict
 import json
+import os
 import re
 
 import nltk
@@ -56,7 +57,7 @@ def unique_parts(tokens, entity_list, common_words):
 
 def create_entity_map(know, common_words):
     entity_tokens = [tokenize(entity['name'] or domain) for domain,
-                                                            d in know.items() for entity in d.values()]
+                     d in know.items() for entity in d.values()]
     fingerprints = (unique_parts(tokens, entity_tokens, common_words)
                     for tokens in entity_tokens)
 
@@ -127,14 +128,14 @@ def intersect(tfidf_result, rule_based_result, upto=None):
 if __name__ == "__main__":
     dataroot = 'data'
     split = 'val'
-    logs = load(f'{dataroot}/{split}/logs.json')
-    know = load(f'{dataroot}/knowledge.json')
-    tfidf = load(f'{dataroot}/{split}/tfidf.json')
+    logs = load(os.path.join(dataroot, split, 'logs.json'))
+    know = load(os.path.join(dataroot, 'knowledge.json'))
+    tfidf = load(os.path.join(dataroot, split, 'tfidf-raw.json'))
 
     common_words = get_common_words(logs)
     entity_map = create_entity_map(know, common_words)
     rule_based = (search_rule_based(log, entity_map) for log in tqdm(logs))
     intersection = [intersect(t, r) or t for t, r in zip(tfidf, rule_based)]
 
-    with open(f'{dataroot}/{split}/intersection.json', 'w') as f:
+    with open(os.path.join(dataroot, split, 'tfidf.json'), 'w') as f:
         json.dump(intersection, f, indent=2)

@@ -96,7 +96,7 @@ class Metric:
         ref_response = self._normalize_text(ref_response)
         hyp_response_norm = self._normalize_text(hyp_response)
         if not hyp_response_norm:
-            print(f'Empty hyp response: {hyp_response}')
+            print('Empty hyp response:', hyp_response)
             return 0.0
         hyp_response = hyp_response_norm
 
@@ -158,15 +158,7 @@ class Metric:
 
         return (score_p, score_r, score_f)
 
-    def print_confusion_matrix(self):
-        total = (self._detection_tp + self._detection_fp
-                 + self._detection_fn + self._detection_tn)
-        print('Confusion Matrix for Knowledge-seeking Turn Detection')
-        print(f'TP {self._detection_tp / total:5.1%} FP {self._detection_fp / total:5.1%}')
-        print(f'FN {self._detection_fn / total:5.1%} TN {self._detection_tn / total:5.1%}')
-
     def scores(self):
-        self.print_confusion_matrix()
         detection_p, detection_r, detection_f = self._compute(self._detection_tp)
 
         selection_mrr5_p, selection_mrr5_r, selection_mrr5_f = self._compute(self._selection_mrr5)
