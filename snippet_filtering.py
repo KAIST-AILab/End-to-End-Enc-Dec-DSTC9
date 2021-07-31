@@ -1,4 +1,4 @@
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, namedtuple
 import json
 import os
 import re
@@ -7,6 +7,7 @@ import nltk
 from tqdm.auto import tqdm
 
 stopwords = nltk.corpus.stopwords.words('english')
+Key = namedtuple('Key', 'domain entity_id')
 
 
 def load(path):
@@ -16,7 +17,7 @@ def load(path):
 
 def tokenize(text):
     tokens = re.split(r'\W+', text.lower())
-    return [token for token in tokens if token not in stopwords]
+    return tuple(token for token in tokens if token not in stopwords)
 
 
 def get_common_words(logs):
@@ -56,18 +57,19 @@ def unique_parts(tokens, entity_list, common_words):
 
 
 def create_entity_map(know, common_words):
-    entity_tokens = [tokenize(entity['name'] or domain) for domain,
-                     d in know.items() for entity in d.values()]
-    fingerprints = (unique_parts(tokens, entity_tokens, common_words)
-                    for tokens in entity_tokens)
+    key2name = {Key(domain, e_id): e['name'] or domain
+                for domain, d in know.items() for e_id, e in d.items()}
+    name2key = {name: key for key, name in key2name.items()}
 
-    entity_keys = ({'domain': domain, 'entity_id': entity_id}
-                   for domain, d in know.items() for entity_id in d.keys())
-    entity_map = {
-        variant: [entity_key]
-        for entity_key, fingerprint in zip(entity_keys, fingerprints) for variant in fingerprint
+    key2tokens = {key: tokenize(name) for key, name in key2name.items()}
+    entity_set = set(key2tokens.values())
+    fingerprints = {key: unique_parts(tokens, entity_set, common_words)
+                    for key, tokens in key2tokens.items()}
+    fingerprint2key = {
+        variant: [key]
+        for key, fingerprint in fingerprints.items() for variant in fingerprint
     }
-    return entity_map
+    return name2key, fingerprint2key
 
 
 def off_by_one_letter(shorter, longer):
@@ -114,8 +116,7 @@ def find_all_entities(history, entity_map):
 def search_rule_based(log, entity_map):
     history = '\n'.join(turn['text'] for turn in log)
     found_entities = set(find_all_entities(history, entity_map))
-    found_entities |= {{'domain': 'taxi', 'entity_id': '*'},
-                       {'domain': 'train', 'entity_id': '*'}}
+    found_entities |= {Key('taxi', '*'), Key('train', '*')}
     return list(found_entities)
 
 
@@ -133,9 +134,12 @@ if __name__ == "__main__":
     tfidf = load(os.path.join(dataroot, split, 'tfidf-raw.json'))
 
     common_words = get_common_words(logs)
-    entity_map = create_entity_map(know, common_words)
+    name_map, entity_map = create_entity_map(know, common_words)
+    tfidf = ([name_map[name] for name in entities] for entities in tfidf)
+
     rule_based = (search_rule_based(log, entity_map) for log in tqdm(logs))
-    intersection = [intersect(t, r) or t for t, r in zip(tfidf, rule_based)]
+    intersection = (intersect(t, r) or t for t, r in zip(tfidf, rule_based))
+    formatted = [[key._asdict() for key in keys] for keys in intersection]
 
     with open(os.path.join(dataroot, split, 'tfidf.json'), 'w') as f:
-        json.dump(intersection, f, indent=2)
+        json.dump(formatted, f, indent=2)
